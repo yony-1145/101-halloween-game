@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>借り人競争 早押し</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700;900&display=swap">
+  <style>
+    /* base styles the Claude frame used to provide */
+    :root {
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px)
+    }
+
+    html {
+      scroll-padding-top: env(safe-area-inset-top, 0px)
+    }
+
+    body {
+      margin: 0;
+      padding: 0
+    }
+
+    img {
+      max-width: 100%
+    }
+
+    [hidden]:not([hidden=until-found i]) {
+      display: none !important
+    }
+  </style>
+  <style>
+    /* Layout: one-column app shell under a sticky tab bar; the score view splits into queue + standings on wide screens.
+   Single dark theme by choice: a night-time Halloween party, pumpkin-orange as the only accent. */
+    :root {
+      --bg: #120d18;
+      --surface: #1c1525;
+      --surface-2: #271d33;
+      --line: #3a2d49;
+      --fg: #f6eee3;
+      --muted: #a797b6;
+      --pumpkin: #ff7b1c;
+      --pumpkin-deep: #c94f06;
+      --on-pumpkin: #1a0c02;
+      --ok: #5fd48a;
+      --ng: #ff5470;
+      --wait: #f6c445;
+      --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+      --body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+      color-scheme: dark;
+    }
+
+    html,
+    body {
+      background: var(--bg);
+      color: var(--fg)
+    }
+
+    body {
+      font-family: var(--body);
+      font-size: 16px;
+      line-height: 1.55;
+      padding-left: max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+      padding-block: 0 48px;
+      min-height: 100%;
+      background-image: radial-gradient(ellipse 80% 340px at 50% -80px, rgba(255, 123, 28, .22), transparent 70%);
+      background-repeat: no-repeat;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0 0 auto;
+      height: env(safe-area-inset-top, 0px);
+      z-index: 10;
+      background: var(--bg)
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+      color: inherit
+    }
+
+    button {
+      cursor: pointer
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--pumpkin);
+      outline-offset: 2px
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto
+    }
+
+    .wrap.wide {
+      max-width: 1400px
+    }
+
+    /* top bar */
+    .top {
+      position: sticky;
+      top: env(safe-area-inset-top, 0px);
+      z-index: 5;
+      background: rgba(18, 13, 24, .92);
+      backdrop-filter: blur(8px);
+      margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 0;
+      padding: 10px max(16px, env(safe-area-inset-left, 0px)) 10px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .top-in {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap
+    }
+
+    .brand {
+      font-family: var(--display);
+      font-size: 18px;
+      letter-spacing: .02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-right: auto
+    }
+
+    .brand small {
+      font-family: var(--body);
+      font-weight: 700;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px
+    }
+
+    .tab {
+      border: 0;
+      background: none;
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.2
+    }
+
+    .tab span {
+      display: block;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: .06em
+    }
+
+    .tab[aria-selected="true"] {
+      background: var(--pumpkin);
+      color: var(--on-pumpkin)
+    }
+
+    .banner {
+      margin: 14px auto 0;
+      max-width: 760px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--ng);
+      background: rgba(255, 84, 112, .1);
+      font-size: 14px
+    }
+
+    .banner b {
+      display: block
+    }
+
+    .view {
+      padding-top: 18px
+    }
+
+    h2 {
+      font-family: var(--display);
+      font-weight: 400;
+      font-size: 20px;
+      margin: 0;
+      text-wrap: balance
+    }
+
+    h2 small,
+    .en {
+      font-family: var(--body);
+      font-weight: 400;
+      color: var(--muted);
+      font-size: .72em
+    }
+
+    .label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+      text-transform: uppercase
+    }
+
+    .muted {
+      color: var(--muted)
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      text-align: center
+    }
+
+    .btn small {
+      display: block;
+      font-weight: 400;
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .btn:disabled {
+      opacity: .4;
+      cursor: not-allowed
+    }
+
+    .btn.primary {
+      background: var(--pumpkin);
+      border-color: var(--pumpkin);
+      color: var(--on-pumpkin)
+    }
+
+    .btn.primary small {
+      color: rgba(26, 12, 2, .75)
+    }
+
+    .btn.armed {
+      background: var(--wait);
+      border-color: var(--wait);
+      color: #1d1600;
+      animation: pulse .6s ease-in-out infinite alternate
+    }
+
+    .btn.armed small {
+      color: #3d3100
+    }
+
+    .btn.danger {
+      border-color: var(--ng);
+      color: var(--ng);
+      background: none
+    }
+
+    .btn.link {
+      background: none;
+      border: 0;
+      padding: 4px 0;
+      color: var(--muted);
+      text-decoration: underline;
+      font-weight: 400
+    }
+
+    input[type=text],
+    input[type=password],
+    select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 16px
+    }
+
+    input::placeholder {
+      color: #6f6280
+    }
+
+    /* team chip */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      white-space: nowrap;
+      min-width: 0
+    }
+
+    .dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--c);
+      flex: none;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, .18)
+    }
+
+    .chip .en {
+      font-size: .8em
+    }
+
+    /* ===== Team view ===== */
+    .pick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px
+    }
+
+    .pick {
+      border: 2px solid var(--line);
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 14px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left
+    }
+
+    .pick .swatch {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--c);
+      flex: none;
+      box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .18), 0 0 0 2px rgba(255, 255, 255, .15)
+    }
+
+    .pick b {
+      display: block;
+      font-size: 17px;
+      line-height: 1.2
+    }
+
+    .pick span {
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    .pick:hover {
+      border-color: var(--pumpkin)
+    }
+
+    .team-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 10px solid var(--c)
+    }
+
+    .team-head .chip {
+      font-size: 20px;
+      white-space: normal;
+      flex-wrap: wrap
+    }
+
+    .team-head .btn.link {
+      margin-left: auto;
+      font-size: 13px;
+      white-space: nowrap
+    }
+
+    .roundline {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap
+    }
+
+    .roundline .r {
+      font-family: var(--display);
+      font-size: 22px
+    }
+
+    .timer {
+      font-family: var(--display);
+      font-variant-numeric: tabular-nums;
+      font-size: 28px;
+      color: var(--pumpkin)
+    }
+
+    .timer.low {
+      color: var(--ng)
+    }
+
+    .status-card {
+      border-radius: 18px;
+      padding: 18px;
+      text-align: center;
+      border: 2px solid var(--line);
+      background: var(--surface)
+    }
+
+    .status-card .big {
+      font-family: var(--display);
+      font-size: clamp(28px, 9vw, 44px);
+      line-height: 1.15;
+      margin: 4px 0
+    }
+
+    .status-card .wait-with {
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 6px
+    }
+
+    .status-card .wait-with .en {
+      display: block;
+      font-size: 14px;
+      font-weight: 400
+    }
+
+    .status-card.pending {
+      border-color: var(--wait)
+    }
+
+    .status-card.pending .big {
+      color: var(--wait)
+    }
+
+    .status-card.ok {
+      border-color: var(--ok);
+      background: rgba(95, 212, 138, .08)
+    }
+
+    .status-card.ok .big {
+      color: var(--ok)
+    }
+
+    .status-card.ng {
+      border-color: var(--ng);
+      background: rgba(255, 84, 112, .08)
+    }
+
+    .status-card.ng .big {
+      color: var(--ng)
+    }
+
+    .buzz-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: stretch
+    }
+
+    .buzz-form label {
+      font-weight: 700
+    }
+
+    .buzz-form input {
+      font-size: 20px;
+      padding: 14px
+    }
+
+    .buzz {
+      align-self: center;
+      width: min(78vw, 300px);
+      aspect-ratio: 1;
+      max-width: 100%;
+      border-radius: 50%;
+      border: 0;
+      background: radial-gradient(circle at 50% 35%, #ffa25a, var(--pumpkin) 45%, var(--pumpkin-deep));
+      color: var(--on-pumpkin);
+      font-family: var(--display);
+      font-size: clamp(26px, 8vw, 38px);
+      line-height: 1.15;
+      box-shadow: 0 10px 0 #7a2f02, 0 18px 40px rgba(255, 123, 28, .35);
+      transition: transform .08s, box-shadow .08s
+    }
+
+    .buzz small {
+      display: block;
+      font-family: var(--display);
+      font-size: .62em;
+      letter-spacing: .06em
+    }
+
+    .buzz:active:not(:disabled) {
+      transform: translateY(8px);
+      box-shadow: 0 2px 0 #7a2f02, 0 8px 20px rgba(255, 123, 28, .3)
+    }
+
+    .buzz:disabled {
+      filter: grayscale(.85) brightness(.55);
+      cursor: not-allowed;
+      box-shadow: 0 6px 0 #2a2030
+    }
+
+    .why {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      min-height: 1.5em
+    }
+
+    .err {
+      color: var(--ng);
+      font-weight: 700;
+      text-align: center;
+      font-size: 14px
+    }
+
+    /* ===== Host view ===== */
+    .lock {
+      max-width: 380px;
+      margin: 40px auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px
+    }
+
+    .rounds-set {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-weight: 700
+    }
+
+    .rounds-set select {
+      width: auto;
+      min-width: 120px;
+      font-weight: 700
+    }
+
+    .ctrl-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px
+    }
+
+    .host-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap
+    }
+
+    .host-head .r {
+      font-family: var(--display);
+      font-size: 28px
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid currentColor
+    }
+
+    .pill.open {
+      color: var(--ok)
+    }
+
+    .pill.closed {
+      color: var(--wait)
+    }
+
+    .pill.idle {
+      color: var(--muted)
+    }
+
+    .pill.done {
+      color: var(--pumpkin)
+    }
+
+    .queue {
+      display: flex;
+      flex-direction: column;
+      gap: 8px
+    }
+
+    .qrow {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      grid-template-areas: "num team sec" "num who who" "num judge place";
+      gap: 4px 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--c)
+    }
+
+    .qrow .num {
+      grid-area: num;
+      font-family: var(--display);
+      font-size: 24px;
+      text-align: center;
+      font-variant-numeric: tabular-nums
+    }
+
+    .qrow .team {
+      grid-area: team;
+      min-width: 0
+    }
+
+    .qrow .team .chip {
+      white-space: normal
+    }
+
+    .qrow .who {
+      grid-area: who;
+      font-size: 17px;
+      font-weight: 700;
+      overflow-wrap: anywhere
+    }
+
+    .qrow .sec {
+      grid-area: sec;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-size: 14px
+    }
+
+    .qrow .judge {
+      grid-area: judge;
+      display: flex;
+      gap: 6px
+    }
+
+    .qrow .place {
+      grid-area: place;
+      font-family: var(--display);
+      font-size: 18px;
+      text-align: right
+    }
+
+    .qrow.is-ng {
+      opacity: .55
+    }
+
+    .qrow.is-ng .who {
+      text-decoration: line-through
+    }
+
+    .jb {
+      border: 1px solid var(--line);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-weight: 900;
+      font-size: 14px
+    }
+
+    .jb.ok.on {
+      background: var(--ok);
+      border-color: var(--ok);
+      color: #06210f
+    }
+
+    .jb.ng.on {
+      background: var(--ng);
+      border-color: var(--ng);
+      color: #2a0008
+    }
+
+    @media (min-width:640px) {
+      .qrow {
+        grid-template-columns: 48px minmax(120px, .9fr) minmax(0, 1.4fr) 64px auto 64px;
+        grid-template-areas: "num team who sec judge place"
+      }
+
+      .ctrl-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr))
+      }
+    }
+
+    .empty {
+      padding: 22px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: 12px
+    }
+
+    .standings {
+      display: flex;
+      flex-direction: column;
+      gap: 6px
+    }
+
+    .srow {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 54px;
+      gap: 10px;
+      align-items: center;
+      padding: 6px 0
+    }
+
+    .srow .rk {
+      font-family: var(--display);
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      color: var(--muted)
+    }
+
+    .srow .bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--line);
+      margin-top: 4px;
+      overflow: hidden
+    }
+
+    .srow .bar i {
+      display: block;
+      height: 100%;
+      background: var(--c)
+    }
+
+    .srow .pts {
+      font-family: var(--display);
+      font-size: 20px;
+      text-align: right;
+      font-variant-numeric: tabular-nums
+    }
+
+    .srow.top1 .rk {
+      color: var(--pumpkin)
+    }
+
+    details.sec-box {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface)
+    }
+
+    details.sec-box>summary {
+      padding: 14px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px
+    }
+
+    details.sec-box>summary::after {
+      content: "▾";
+      color: var(--muted)
+    }
+
+    details.sec-box[open]>summary::after {
+      content: "▴"
+    }
+
+    details.sec-box>div {
+      padding: 0 16px 16px
+    }
+
+    .fix-round {
+      display: grid;
+      grid-template-columns: 70px repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      align-items: center;
+      padding: 8px 0;
+      border-top: 1px solid var(--line)
+    }
+
+    .fix-round b {
+      font-family: var(--display);
+      font-weight: 400
+    }
+
+    @media (max-width:520px) {
+      .fix-round {
+        grid-template-columns: repeat(3, minmax(0, 1fr))
+      }
+
+      .fix-round b {
+        grid-column: 1/-1
+      }
+    }
+
+    .team-edit {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      padding: 6px 0
+    }
+
+    .team-edit input[type=color] {
+      width: 44px;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--bg);
+      padding: 2px
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 10px
+    }
+
+    .note {
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    .saved {
+      color: var(--ok);
+      font-size: 13px;
+      font-weight: 700
+    }
+
+    .reset-zone {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 12px
+    }
+
+    /* ===== Score view (projector) ===== */
+    .score {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: minmax(0, 1fr)
+    }
+
+    @media (min-width:900px) {
+      .score {
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr)
+      }
+    }
+
+    .score-hero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--line)
+    }
+
+    .score-hero .rn {
+      font-family: var(--display);
+      font-size: clamp(44px, 8vw, 110px);
+      line-height: 1
+    }
+
+    .score-hero .rn small {
+      display: block;
+      font-size: .26em;
+      color: var(--muted);
+      font-family: var(--body);
+      font-weight: 700;
+      letter-spacing: .12em
+    }
+
+    .score-hero .timer {
+      font-size: clamp(56px, 11vw, 150px);
+      line-height: 1
+    }
+
+    .score-hero .state {
+      font-size: clamp(16px, 1.8vw, 24px);
+      font-weight: 700
+    }
+
+    .sq {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px
+    }
+
+    .sqrow {
+      display: grid;
+      grid-template-columns: clamp(40px, 4vw, 64px) minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: var(--surface);
+      border-left: 10px solid var(--c);
+      font-size: clamp(18px, 2.1vw, 30px)
+    }
+
+    .sqrow .n {
+      font-family: var(--display);
+      color: var(--muted);
+      text-align: center;
+      font-variant-numeric: tabular-nums
+    }
+
+    .sqrow .who {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+      min-width: 0
+    }
+
+    .sqrow .who .chip {
+      font-size: .7em;
+      display: flex;
+      color: var(--muted)
+    }
+
+    .sqrow .st {
+      font-family: var(--display);
+      white-space: nowrap
+    }
+
+    .sqrow.pending .st {
+      color: var(--wait)
+    }
+
+    .sqrow.ok .st {
+      color: var(--ok)
+    }
+
+    .sqrow.ng {
+      opacity: .5
+    }
+
+    .sqrow.ng .st {
+      color: var(--ng)
+    }
+
+    .sqrow.place .st {
+      color: var(--pumpkin)
+    }
+
+    .score .standings .srow {
+      font-size: clamp(16px, 1.7vw, 24px)
+    }
+
+    .score .standings .srow .pts {
+      font-size: clamp(20px, 2.4vw, 34px)
+    }
+
+    @keyframes pulse {
+      from {
+        filter: brightness(1)
+      }
+
+      to {
+        filter: brightness(1.18)
+      }
+    }
+
+    @keyframes pop {
+      0% {
+        transform: scale(.9);
+        opacity: .3
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 1
+      }
+    }
+
+    .pop {
+      animation: pop .25s ease-out
+    }
+
+    @media (prefers-reduced-motion:reduce) {
+      * {
+        animation: none !important;
+        transition: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="top">
+    <div class="top-in">
+      <div class="brand"><span aria-hidden="true">🎃</span><span>借り人競争<br><small>Borrow-a-Person Race</small></span>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="画面 / Screens">
+        <button class="tab" role="tab" id="tab-team" data-view="team" aria-selected="true">チーム<span>Team</span></button>
+        <button class="tab" role="tab" id="tab-host" data-view="host" aria-selected="false">司会<span>Host</span></button>
+        <button class="tab" role="tab" id="tab-score" data-view="score"
+          aria-selected="false">スコア<span>Score</span></button>
+      </nav>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden=""></div>
+
+  <!-- ============ TEAM ============ -->
+  <main id="view-team" class="view wrap stack">
+    <section id="teamPick" class="stack">
+      <h2>リストバンドと同じ色をタップ <small>Tap the color of your wristband</small></h2>
+      <div id="pickGrid" class="pick-grid"><button type="button" class="pick" data-team="t1" style="--c:#e53935"><span
+            class="swatch"></span><span><b>赤チーム</b><span>Red Team</span></span></button><button type="button"
+          class="pick" data-team="t2" style="--c:#ff8a1f"><span class="swatch"></span><span><b>オレンジチーム</b><span>Orange
+              Team</span></span></button><button type="button" class="pick" data-team="t3" style="--c:#ffd600"><span
+            class="swatch"></span><span><b>黄チーム</b><span>Yellow Team</span></span></button><button type="button"
+          class="pick" data-team="t4" style="--c:#9be32b"><span class="swatch"></span><span><b>黄緑チーム</b><span>Lime
+              Team</span></span></button><button type="button" class="pick" data-team="t5" style="--c:#1f9d55"><span
+            class="swatch"></span><span><b>緑チーム</b><span>Green Team</span></span></button><button type="button"
+          class="pick" data-team="t6" style="--c:#5ec8f2"><span class="swatch"></span><span><b>水色チーム</b><span>Sky Blue
+              Team</span></span></button><button type="button" class="pick" data-team="t7" style="--c:#2f6fe0"><span
+            class="swatch"></span><span><b>青チーム</b><span>Blue Team</span></span></button><button type="button"
+          class="pick" data-team="t8" style="--c:#8e4ad8"><span class="swatch"></span><span><b>紫チーム</b><span>Purple
+              Team</span></span></button><button type="button" class="pick" data-team="t9" style="--c:#ff6fb5"><span
+            class="swatch"></span><span><b>ピンクチーム</b><span>Pink Team</span></span></button><button type="button"
+          class="pick" data-team="t10" style="--c:#f4f4f4"><span class="swatch"></span><span><b>白チーム</b><span>White
+              Team</span></span></button></div>
+    </section>
+    <section id="teamMain" class="stack" hidden="">
+      <div id="teamHead" class="team-head"></div>
+      <div class="roundline"><span class="r" id="teamRound"></span><span class="timer" id="teamTimer"
+          data-timer=""></span></div>
+      <div id="teamStatus"></div>
+      <form id="buzzForm" class="buzz-form card" autocomplete="off">
+        <label for="personName">連れてきた人の名前 <span class="en">Name of the person you brought</span></label>
+        <input type="text" id="personName" maxlength="40" placeholder="名前シールの名前 / Name on their sticker"
+          enterkeyhint="send">
+        <button type="submit" id="buzzBtn" class="buzz">回答する！<small>BUZZ!</small></button>
+        <div id="buzzWhy" class="why"></div>
+        <div id="buzzErr" class="err" role="alert"></div>
+      </form>
+    </section>
+  </main>
+
+  <!-- ============ HOST ============ -->
+  <main id="view-host" class="view wrap stack" hidden="">
+    <form id="hostLock" class="lock card" hidden="">
+      <h2>司会用パスコード <small>Host passcode</small></h2>
+      <input type="password" id="passInput" inputmode="numeric" placeholder="パスコード / Passcode">
+      <button class="btn primary" type="submit">開く<small>Unlock</small></button>
+      <div id="passErr" class="err" role="alert"></div>
+    </form>
+    <div id="hostMain" class="stack" hidden="">
+      <div class="host-head">
+        <span class="r" id="hostRound"></span>
+        <span id="hostPill"></span>
+        <span class="timer" id="hostTimer" data-timer=""></span>
+        <button type="button" class="btn link" id="hostLogout" style="margin-left:auto">ロック / Lock</button>
+      </div>
+      <div class="rounds-set">
+        <label for="totalRounds">全部で <span class="en">Total rounds</span></label>
+        <select id="totalRounds"></select>
+        <span class="note" id="roundsNote"></span>
+      </div>
+      <div class="ctrl-grid">
+        <button type="button" class="btn primary" id="btnStart"></button>
+        <button type="button" class="btn" id="btnClose">締め切る<small>Close buzzing</small></button>
+        <button type="button" class="btn" id="btnConfirm">結果を確定<small>Confirm result</small></button>
+        <button type="button" class="btn" id="btnUnconfirm">確定を取り消す<small>Undo confirm</small></button>
+      </div>
+      <div id="hostMsg" class="note"></div>
+      <section class="card stack">
+        <h2>受付順 <small>Buzz order</small></h2>
+        <p class="note" style="margin:0">判定のない受付は OK 扱い。NG だけが外れます。 / Unjudged buzzes count as OK; only NG drops out.
+        </p>
+        <div id="hostQueue" class="queue"></div>
+      </section>
+      <section class="card stack">
+        <h2>総合得点 <small>Total score</small></h2>
+        <div id="hostStandings" class="standings"></div>
+      </section>
+      <details class="sec-box" id="fixBox">
+        <summary>結果の修正 <span class="muted">Fix results</span></summary>
+        <div id="fixRounds"></div>
+      </details>
+      <details class="sec-box" id="teamsBox">
+        <summary>チームの色 <span class="muted">Team colors</span></summary>
+        <div>
+          <p class="note">当日のリストバンドに合わせて、色・日本語名・英語名を変えられます。 / Match the wristbands used on the day.</p>
+          <div id="teamEdit"></div>
+          <div class="row-actions">
+            <button type="button" class="btn primary" id="saveTeams">保存<small>Save</small></button>
+            <button type="button" class="btn" id="defaultTeams">初期の色に戻す<small>Restore defaults</small></button>
+            <span id="teamsSaved" class="saved"></span>
+          </div>
+        </div>
+      </details>
+      <details class="sec-box">
+        <summary>パスコード <span class="muted">Passcode</span></summary>
+        <div>
+          <p class="note">初期値は 1031。変更すると全員の司会画面に新しいパスコードが必要です。 / Default is 1031.</p>
+          <div class="row-actions">
+            <input type="text" id="newPass" maxlength="20" placeholder="新しいパスコード / New passcode"
+              style="flex:1;min-width:0">
+            <button type="button" class="btn" id="savePass">変更<small>Change</small></button>
+            <span id="passSaved" class="saved"></span>
+          </div>
+        </div>
+      </details>
+      <div class="reset-zone">
+        <button type="button" class="btn link" id="resetAsk">テスト結果をすべて消す / Clear all test results</button>
+        <div id="resetConfirm" class="card" hidden="" style="margin-top:10px">
+          <p style="margin-top:0">全ラウンドの受付と得点を消して、第1ラウンド前に戻します。チームの色とパスコードは残ります。<br><span class="muted">This deletes
+              every buzz and score. Team colors and passcode stay.</span></p>
+          <div class="row-actions" style="justify-content:center">
+            <button type="button" class="btn danger" id="resetDo">本当に消す<small>Yes, clear everything</small></button>
+            <button type="button" class="btn" id="resetCancel">やめる<small>Cancel</small></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ SCORE ============ -->
+  <main id="view-score" class="view wrap wide" hidden="">
+    <div class="score">
+      <section>
+        <div class="score-hero">
+          <div class="rn" id="scoreRound"></div>
+          <div style="text-align:right">
+            <div class="timer" id="scoreTimer" data-timer=""></div>
+            <div class="state" id="scoreState"></div>
+          </div>
+        </div>
+        <div id="scoreQueue" class="sq"></div>
+      </section>
+      <section class="card">
+        <h2 style="margin-bottom:10px">総合得点 <small>Standings</small></h2>
+        <div id="scoreStandings" class="standings"></div>
+      </section>
+    </div>
+  </main>
+
+
+  <!-- ===== 設定：Supabase の Project URL と anon (publishable) key を入れてください ===== -->
+  <script>
+    window.HAYAOSHI_CONFIG = {
+      SUPABASE_URL: 'https://ftufeqbdrjaprlurhszc.supabase.co',
+      SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0dWZlcWJkcmphcHJsdXJoc3pjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzNzE4NDcsImV4cCI6MjEwODk0Nzg0N30.klCqkFMiavs1LW_pAHGQ3LvvD8w_XU2ewWGDNSB-dok',
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+  <script>
+    /* ---------- Supabase adapter ----------
+       The game was written for Claude's shared store (window.claude.use('db')).
+       This file recreates the small part of that API the game uses, on top of
+       Supabase: one table `docs` (path -> jsonb) plus an `acquire_lease` RPC
+       for locks and server time. See setup.sql. */
+    (() => {
+      const CFG = window.HAYAOSHI_CONFIG || {};
+      const configured = CFG.SUPABASE_URL && CFG.SUPABASE_KEY &&
+        !/YOUR_|xxxx/i.test(CFG.SUPABASE_URL + CFG.SUPABASE_KEY);
+      if (!configured || !window.supabase || !window.supabase.createClient) {
+        console.warn('[hayaoshi] Supabase is not configured; running offline.');
+        return; // game shows its "not connected" banner
+      }
+      const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        realtime: { params: { eventsPerSecond: 20 } },
+      });
+
+      const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
+      const collOf = p => p.split('/')[0];
+      const idOf = p => p.slice(p.indexOf('/') + 1);
+
+      // path -> { data, ver }   (whole table is small: game docs + buzzes)
+      const cache = new Map();
+      let loaded = false;
+      const docSubs = new Map();  // path -> Set(fn)
+      const collSubs = new Map(); // coll -> Set({ fn, limit })
+
+      function docSnap(path) {
+        const e = cache.get(path);
+        return { id: idOf(path), exists: !!e, data: () => (e ? clone(e.data) : undefined) };
+      }
+      function collSnap(coll, limit, filters) {
+        let docs = [];
+        for (const [p, e] of cache) {
+          if (collOf(p) !== coll) continue;
+          if (filters && !filters.every(([f, v]) => e.data && e.data[f] === v)) continue;
+          docs.push({ id: idOf(p), exists: true, data: () => clone(e.data) });
+        }
+        docs.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        if (limit) docs = docs.slice(0, limit);
+        return { docs, size: docs.length, empty: docs.length === 0 };
+      }
+      const safe = fn => { try { fn(); } catch (e) { console.error(e); } };
+      function notify(paths) {
+        if (!loaded) return;
+        const colls = new Set();
+        for (const p of paths) {
+          colls.add(collOf(p));
+          const s = docSubs.get(p);
+          if (s) for (const fn of s) safe(() => fn(docSnap(p)));
+        }
+        for (const c of colls) {
+          const s = collSubs.get(c);
+          if (s) for (const sub of s) safe(() => sub.fn(collSnap(c, sub.limit)));
+        }
+      }
+      function notifyAll() {
+        if (!loaded) return;
+        for (const [p, s] of docSubs) for (const fn of s) safe(() => fn(docSnap(p)));
+        for (const [c, s] of collSubs) for (const sub of s) safe(() => sub.fn(collSnap(c, sub.limit)));
+      }
+      // apply one row; ignore anything older than what we already have
+      function applyRow(path, data, ver) {
+        const cur = cache.get(path);
+        if (cur && ver != null && cur.ver != null && ver < cur.ver) return false;
+        cache.set(path, { data, ver });
+        return true;
+      }
+
+      // ---- full reload (initial, after reconnect, on wake, and every 10s as a safety net)
+      let refreshing = null;
+      async function refresh() {
+        if (refreshing) return refreshing;
+        refreshing = (async () => {
+          const { data, error } = await sb.from('docs').select('path,data,ver').limit(5000);
+          if (error) throw error;
+          const seen = new Set();
+          for (const r of data) { seen.add(r.path); applyRow(r.path, r.data, r.ver); }
+          for (const p of [...cache.keys()]) if (!seen.has(p)) cache.delete(p);
+          loaded = true;
+          notifyAll();
+        })().finally(() => { refreshing = null; });
+        return refreshing;
+      }
+
+      // ---- realtime
+      let channel = null;
+      function subscribe() {
+        if (channel) sb.removeChannel(channel);
+        channel = sb.channel('docs-all')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'docs' }, msg => {
+            if (msg.eventType === 'DELETE') {
+              const p = msg.old && msg.old.path;
+              if (p && cache.delete(p)) notify([p]);
+            } else if (msg.new && msg.new.path) {
+              if (applyRow(msg.new.path, msg.new.data, msg.new.ver)) notify([msg.new.path]);
+            }
+          })
+          // realtime only starts delivering changes after this message; reload then so nothing in the gap is missed
+      .on('system', {}, m => {
+        if (m && m.extension === 'postgres_changes' && m.status === 'ok') refresh().catch(console.error);
+      })
+      .subscribe(status => {
+            if (status === 'SUBSCRIBED') refresh().catch(console.error);
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              setTimeout(() => { if (channel && channel.state !== 'joined') subscribe(); }, 2000);
+            }
+          });
+      }
+      subscribe();
+      setInterval(() => { if (document.visibilityState === 'visible') refresh().catch(() => { }); }, 10000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refresh().catch(() => { });
+      });
+      window.addEventListener('online', () => { subscribe(); });
+
+      const ok = ({ error }) => { if (error) throw error; };
+
+      // ---- the API the game uses
+      function docRef(path) {
+        return {
+          id: idOf(path),
+          onSnapshot(fn) {
+            if (!docSubs.has(path)) docSubs.set(path, new Set());
+            docSubs.get(path).add(fn);
+            if (loaded) safe(() => fn(docSnap(path)));
+            return () => docSubs.get(path).delete(fn);
+          },
+          async get() {
+            const { data, error } = await sb.from('docs').select('path,data,ver').eq('path', path).maybeSingle();
+            if (error) throw error;
+            if (data) applyRow(data.path, data.data, data.ver); else cache.delete(path);
+            return docSnap(path);
+          },
+          async set(obj) {
+            const { data, error } = await sb.from('docs').upsert({ path, data: obj }).select('path,data,ver').single();
+            if (error) throw error;
+            if (applyRow(data.path, data.data, data.ver)) notify([path]);
+          },
+          async update(patch) {
+            ok(await sb.rpc('doc_update', { p_path: path, p_patch: patch }));
+            const cur = cache.get(path);
+            if (cur) { cache.set(path, { data: { ...cur.data, ...clone(patch) }, ver: cur.ver }); notify([path]); }
+          },
+          async delete() {
+            ok(await sb.from('docs').delete().eq('path', path));
+            if (cache.delete(path)) notify([path]);
+          },
+          async acquire({ holder, ttlMs }) {
+            const { data, error } = await sb.rpc('acquire_lease', { p_key: path, p_holder: holder, p_ttl_ms: ttlMs });
+            if (error) throw error;
+            return data; // { acquired, holder, expiresAt }
+          },
+        };
+      }
+      function query(coll, filters, limit) {
+        return {
+          where(field, op, value) {
+            if (op !== '==') throw new Error('only == is supported');
+            return query(coll, [...filters, [field, value]], limit);
+          },
+          limit(n) { return query(coll, filters, n); },
+          onSnapshot(fn) {
+            if (!collSubs.has(coll)) collSubs.set(coll, new Set());
+            const sub = { fn, limit };
+            collSubs.get(coll).add(sub);
+            if (loaded) safe(() => fn(collSnap(coll, limit)));
+            return () => collSubs.get(coll).delete(sub);
+          },
+          async get() { // always ask the server, never trust the cache
+            const { data, error } = await sb.from('docs').select('path,data,ver').eq('coll', coll).limit(5000);
+            if (error) throw error;
+            for (const r of data) applyRow(r.path, r.data, r.ver);
+            let docs = data
+              .filter(r => filters.every(([f, v]) => r.data && r.data[f] === v))
+              .map(r => ({ id: idOf(r.path), exists: true, data: () => clone(r.data) }))
+              .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+            if (limit) docs = docs.slice(0, limit);
+            return { docs, size: docs.length, empty: docs.length === 0 };
+          },
+        };
+      }
+      const db = {
+        doc: docRef,
+        collection: c => query(c, [], null),
+      };
+
+      // first load before the game boots, so its first render has data
+      const ready = refresh().catch(e => { console.error('[hayaoshi] first load failed', e); });
+
+      window.claude = {
+        async use(name) {
+          if (name === 'db') { await ready; return db; }
+          return null; // 'user' etc: no accounts on the public site
+        },
+      };
+    })();
+
+  </script>
+  <script>
+    (() => {
+      const DUR = 120000, POINTS = [3, 2, 1], DEFAULT_PASS = '1031', DEFAULT_ROUNDS = 5, MIN_ROUNDS = 3, MAX_ROUNDS = 10;
+      const DEFAULT_TEAMS = [
+        ['t1', '#e53935', '赤', 'Red'], ['t2', '#ff8a1f', 'オレンジ', 'Orange'], ['t3', '#ffd600', '黄', 'Yellow'],
+        ['t4', '#9be32b', '黄緑', 'Lime'], ['t5', '#1f9d55', '緑', 'Green'], ['t6', '#5ec8f2', '水色', 'Sky Blue'],
+        ['t7', '#2f6fe0', '青', 'Blue'], ['t8', '#8e4ad8', '紫', 'Purple'], ['t9', '#ff6fb5', 'ピンク', 'Pink'], ['t10', '#f4f4f4', '白', 'White'],
+      ].map(([id, color, ja, en]) => ({ id, color, ja, en }));
+
+      // in-memory copy so team choice still works on phones that block storage (in-app browsers, strict iOS settings)
+      const mem = {};
+      const LS = {
+        get(k) { try { const v = localStorage.getItem(k); if (v != null) return v; } catch { } return k in mem ? mem[k] : null; },
+        set(k, v) { if (v == null) delete mem[k]; else mem[k] = v; try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { } },
+      };
+      const rid = () => Math.random().toString(36).slice(2, 10);
+      const deviceId = LS.get('kb_dev') || (() => { const id = 'd' + rid(); LS.set('kb_dev', id); return id; })();
+      const holder = deviceId + '-' + rid(); // per tab, so two tabs never share a lease
+
+      const S = {
+        db: null, noDb: false, writable: true, view: 'team',
+        teams: DEFAULT_TEAMS, state: { round: 0, status: 'idle' }, results: { rounds: {} }, config: {},
+        buzzes: [], offset: 0, rtt: Infinity, busy: false, armedUntil: 0, hostUnlocked: LS.get('kb_host') === '1',
+      };
+      const $ = id => document.getElementById(id);
+      const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+      /* ---------- server clock ----------
+         The store has no server timestamp, so we take it from a lease: a granted acquire() reports
+         expiresAt = server time + ttl. Buzz order uses that server time, never the phone's clock. */
+      function parseTs(s) {
+        const m = /^(.*T\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:?\d\d)$/i.exec(String(s));
+        if (!m) return Date.parse(s);
+        return Date.parse(m[1] + m[3]) + (m[2] ? Number('0.' + m[2]) * 1000 : 0);
+      }
+      function takeSample(serverAt, t0, t1) {
+        const rtt = t1 - t0;
+        if (rtt <= S.rtt * 1.6 || !isFinite(S.rtt)) { S.offset = serverAt - (t0 + t1) / 2; S.rtt = Math.max(rtt, 20); }
+      }
+      async function syncClock() {
+        const t0 = Date.now();
+        const r = await S.db.doc('clock/' + deviceId).acquire({ holder, ttlMs: 1000 });
+        const t1 = Date.now();
+        if (!r || !r.acquired || !r.expiresAt) return Date.now() + S.offset;
+        const srv = parseTs(r.expiresAt) - 1000;
+        takeSample(srv, t0, t1);
+        return srv + (t1 - t0) / 2;
+      }
+      const now = () => Date.now() + S.offset;
+
+      /* ---------- derived game state ---------- */
+      const team = id => S.teams.find(t => t.id === id) || { id, color: '#777777', ja: '?', en: '?' };
+      function isLight(hex) {
+        const h = String(hex).replace('#', ''); if (h.length < 6) return false;
+        const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+        return (0.299 * r + 0.587 * g + 0.114 * b) > 170;
+      }
+      const chip = (id, withEn = true) => { const t = team(id); return `<span class="chip" style="--c:${esc(t.color)}"><span class="dot"></span>${esc(t.ja)}${withEn ? ` <span class="en">${esc(t.en)}</span>` : ''}</span>`; };
+      const ord = n => n + (['th', 'st', 'nd', 'rd'][n] || 'th');
+      const deadline = () => S.state.startAt ? Math.min(S.state.startAt + DUR, S.state.closedAt || Infinity) : 0;
+      const isOpen = () => S.state.status === 'open' && now() < deadline();
+      const confirmed = r => (S.results.rounds || {})[r];
+      const totalRounds = () => { const n = Number(S.config.totalRounds); return n >= MIN_ROUNDS && n <= MAX_ROUNDS ? n : DEFAULT_ROUNDS; };
+      const gameOver = () => S.state.round >= totalRounds() && !!confirmed(S.state.round);
+      function entries(r) {
+        return S.buzzes.filter(b => b.round === r).sort((a, b) => (a.at - b.at) || (a.id < b.id ? -1 : 1));
+      }
+      const isLate = b => b.round === S.state.round && S.state.startAt && b.at > deadline();
+      function computePlaces(r) {
+        const out = [];
+        for (const b of entries(r)) {
+          if (b.verdict === 'ng' || isLate(b) || out.includes(b.team)) continue;
+          out.push(b.team); if (out.length === 3) break;
+        }
+        return out;
+      }
+      const placesFor = r => (confirmed(r) ? confirmed(r).places || [] : computePlaces(r));
+      function totals() {
+        const t = Object.fromEntries(S.teams.map(x => [x.id, 0]));
+        for (const [, res] of Object.entries(S.results.rounds || {})) (res.places || []).forEach((id, i) => { if (id in t) t[id] += POINTS[i] || 0; });
+        return t;
+      }
+      /** status of one buzz: pending | ok | ng | late, plus place index (0-based) or -1 */
+      function judge(b) {
+        if (b.verdict === 'ng') return { kind: 'ng', place: -1 };
+        if (isLate(b)) return { kind: 'late', place: -1 };
+        const places = placesFor(b.round);
+        const p = places.indexOf(b.team);
+        const conf = !!confirmed(b.round);
+        if (conf) return { kind: 'ok', place: p };
+        return { kind: b.verdict === 'ok' ? 'ok' : 'pending', place: p };
+      }
+      function fmtTime(ms) { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+      function timerText() {
+        if (S.state.status === 'open') { const left = deadline() - now(); return left > 0 ? fmtTime(left) : '0:00'; }
+        return '';
+      }
+
+      /* ---------- views ---------- */
+      const VIEWS = ['team', 'host', 'score'];
+      function setView(v, push = true) {
+        if (!VIEWS.includes(v)) v = 'team';
+        S.view = v;
+        VIEWS.forEach(x => { $('view-' + x).hidden = x !== v; $('tab-' + x).setAttribute('aria-selected', String(x === v)); });
+        if (push) { try { history.replaceState(null, '', '#' + v); } catch { } }
+        wakeLock();
+        render();
+      }
+      document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+      function render() {
+        renderBanner();
+        if (S.view === 'team') renderTeam();
+        if (S.view === 'host') renderHost();
+        if (S.view === 'score') renderScore();
+        tick();
+      }
+      function renderBanner() {
+        const el = $('banner');
+        if (S.noDb) {
+          el.hidden = false;
+          el.innerHTML = '<b>サーバーにつながっていません / Not connected to the live game</b>通信状態を確認して、ページを開き直してください。 Check your connection and reload this page.';
+        } else if (!S.writable && S.view !== 'score') {
+          el.hidden = false;
+          el.innerHTML = '<b>閲覧だけの権限です / You can view but not buzz</b>運営に、このページの編集権限を付けてもらってください。 Ask the organizers to give you edit access to this page.';
+        } else el.hidden = true;
+      }
+
+      /* ----- team ----- */
+      let lastTeamSig = '';
+      function myTeam() { const t = LS.get('kb_team'); return t && S.teams.some(x => x.id === t) ? t : null; }
+      function renderTeam() {
+        const tid = myTeam();
+        $('teamPick').hidden = !!tid; $('teamMain').hidden = !tid;
+        if (!tid) {
+          $('pickGrid').innerHTML = S.teams.map(t => `<button type="button" class="pick" data-team="${t.id}" style="--c:${esc(t.color)}"><span class="swatch"></span><span><b>${esc(t.ja)}チーム</b><span>${esc(t.en)} Team</span></span></button>`).join('');
+          return;
+        }
+        const t = team(tid);
+        $('teamHead').style.setProperty('--c', t.color);
+        $('teamHead').innerHTML = `<span class="chip"><span class="dot"></span>${esc(t.ja)}チーム <span class="en">${esc(t.en)} Team</span></span><button type="button" class="btn link" id="changeTeam">チームを変更 / Change team</button>`;
+        const r = S.state.round;
+        const n = totalRounds();
+        $('teamRound').textContent = r ? `第${r}ラウンド（全${n}） / Round ${r} of ${n}` : `開始前・全${n}ラウンド / ${n} rounds`;
+
+        const mine = r ? entries(r).filter(b => b.team === tid) : [];
+        const active = mine.find(b => b.verdict !== 'ng');
+        const lastNg = !active && mine.length ? mine[mine.length - 1] : null;
+        let html = '';
+        if (!r) {
+          html = `<div class="status-card"><div class="big">まもなく開始</div><div class="muted">Waiting for the first round</div></div>`;
+        } else if (active) {
+          const all = entries(r), no = all.indexOf(active) + 1, j = judge(active);
+          if (j.kind === 'late') {
+            html = `<div class="status-card ng"><div class="big">時間切れ</div><div>Too late for this round</div></div>`;
+          } else if (j.kind === 'pending' && !confirmed(r)) {
+            html = `<div class="status-card pending"><div class="label">受付番号 / Your number</div><div class="big">${no}番目に受付</div><div class="muted">You're #${no}</div>
+        <div class="wait-with">${esc(active.name)}さんと一緒にお待ちください<span class="en">Please wait with ${esc(active.name)}.</span></div>
+        <div class="muted" style="margin-top:8px">チェック中… / Checking…</div></div>`;
+          } else if (j.place >= 0) {
+            html = `<div class="status-card ok pop"><div class="label">${no}番目 / #${no} · ${esc(active.name)}</div><div class="big">${j.place + 1}位！ +${POINTS[j.place]}点</div><div>${ord(j.place + 1)} place! +${POINTS[j.place]} pts</div></div>`;
+          } else {
+            html = `<div class="status-card ok"><div class="label">${no}番目 / #${no} · ${esc(active.name)}</div><div class="big">OK！</div><div>今回は得点圏外でした / Outside the top 3 this time</div></div>`;
+          }
+        } else if (lastNg) {
+          html = `<div class="status-card ng pop"><div class="big">NG</div><div>${esc(lastNg.name)}さんはお題に合いませんでした。もう一度探そう！</div><div class="muted">Not a match. Find someone else and buzz again!</div></div>`;
+        } else if (!isOpen()) {
+          html = `<div class="status-card"><div class="big">${S.state.status === 'open' ? '時間切れ' : '締め切り'}</div><div class="muted">${S.state.status === 'open' ? "Time's up" : 'Buzzing is closed'}</div></div>`;
+        }
+        const sig = html;
+        if (sig !== lastTeamSig) { $('teamStatus').innerHTML = html; lastTeamSig = sig; }
+        updateBuzzButton();
+      }
+      function buzzBlockReason() {
+        const tid = myTeam(); const r = S.state.round;
+        if (S.noDb) return 'サーバーにつながっていません / Not connected';
+        if (!S.writable) return '編集権限がありません / No edit access';
+        if (!r || S.state.status === 'idle') return 'ラウンド開始を待っています / Waiting for the round to start';
+        if (S.state.status !== 'open') return '締め切りました / Buzzing is closed';
+        if (now() >= deadline()) return '2分を過ぎました / The 2 minutes are up';
+        if (entries(r).some(b => b.team === tid && b.verdict !== 'ng')) return '判定待ちです / Waiting for the check';
+        return '';
+      }
+      function updateBuzzButton() {
+        if (!myTeam()) return;
+        const why = buzzBlockReason();
+        $('buzzBtn').disabled = !!why || S.busy;
+        const hideForm = S.state.round && entries(S.state.round).some(b => b.team === myTeam() && b.verdict !== 'ng');
+        $('buzzForm').hidden = !!hideForm;
+        $('buzzWhy').textContent = S.busy ? '送信中… / Sending…' : why;
+      }
+      $('pickGrid').addEventListener('click', e => { const b = e.target.closest('[data-team]'); if (b) { LS.set('kb_team', b.dataset.team); lastTeamSig = ''; render(); } });
+      $('teamHead').addEventListener('click', e => { if (e.target.id === 'changeTeam') { LS.set('kb_team', null); lastTeamSig = ''; render(); } });
+      $('buzzForm').addEventListener('submit', e => { e.preventDefault(); buzz(); });
+
+      class UErr extends Error { }
+      async function buzz() {
+        const tid = myTeam(), name = $('personName').value.trim();
+        $('buzzErr').textContent = '';
+        if (!name) { $('buzzErr').textContent = '連れてきた人の名前を入力してください / Enter the name of the person you brought'; $('personName').focus(); return; }
+        if (buzzBlockReason() || S.busy) return;
+        S.busy = true; updateBuzzButton();
+        try {
+          const r = S.state.round;
+          const t0 = Date.now();
+          // one lease per team per round: two phones on the same team can never both get through
+          const lease = await S.db.doc(`slots/r${r}-${tid}`).acquire({ holder, ttlMs: 3000 });
+          const t1 = Date.now();
+          if (!lease.acquired) throw new UErr('同じチームの別のスマホが受付中です / Another phone on your team is buzzing');
+          const at = parseTs(lease.expiresAt) - 3000;
+          takeSample(at, t0, t1);
+          if (S.state.round !== r || S.state.status !== 'open' || at > deadline()) throw new UErr('受付時間外でした / Too late, buzzing is closed');
+          const q = await S.db.collection('buzzes').where('round', '==', r).where('team', '==', tid).get();
+          if (q.docs.some(d => d.data().verdict !== 'ng')) throw new UErr('このラウンドはもう受付済みです / Your team already buzzed this round');
+          await S.db.doc(`buzzes/r${r}-${tid}-${q.size + 1}`).set({ round: r, team: tid, name: name.slice(0, 40), at, verdict: null, device: deviceId });
+          $('personName').value = '';
+          try { navigator.vibrate && navigator.vibrate(80); } catch { }
+        } catch (e) {
+          if (e instanceof UErr) $('buzzErr').textContent = e.message;
+          else if (e && e.code === 'invalid_argument') { S.writable = false; $('buzzErr').textContent = '送信できませんでした。編集権限を確認してください / Could not send. Check your edit access.'; }
+          else $('buzzErr').textContent = '通信エラー。もう一度押してください / Network error, please try again';
+        } finally { S.busy = false; render(); }
+      }
+
+      /* ----- host ----- */
+      const passcode = () => String(S.config.passcode || DEFAULT_PASS);
+      $('hostLock').addEventListener('submit', e => {
+        e.preventDefault();
+        if ($('passInput').value.trim() === passcode()) { S.hostUnlocked = true; LS.set('kb_host', '1'); $('passInput').value = ''; $('passErr').textContent = ''; render(); }
+        else $('passErr').textContent = 'パスコードが違います / Wrong passcode';
+      });
+      $('hostLogout').addEventListener('click', () => { S.hostUnlocked = false; LS.set('kb_host', null); render(); });
+
+      function hostMsg(t) { $('hostMsg').textContent = t || ''; }
+      async function run(fn) {
+        try { hostMsg(''); await fn(); }
+        catch (e) { hostMsg(e && e.code === 'invalid_argument' ? '保存できませんでした。このページの編集権限が必要です / Could not save: edit access needed' : '通信エラー。もう一度押してください / Network error, try again'); }
+        render();
+      }
+      async function writeState(patch) { const st = { round: 0, status: 'idle', startAt: null, closedAt: null, ...S.state, ...patch }; S.state = st; await S.db.doc('game/state').set(st); }
+      async function saveRounds(rounds) { S.results = { rounds }; await S.db.doc('game/results').set({ rounds }); }
+
+      function renderHost() {
+        const unlocked = S.hostUnlocked;
+        $('hostLock').hidden = unlocked; $('hostMain').hidden = !unlocked;
+        if (!unlocked) return;
+        const r = S.state.round, st = S.state.status, conf = r && confirmed(r);
+        const n = totalRounds();
+        $('hostRound').textContent = r ? `第${r}ラウンド / 全${n}` : `開始前 / 全${n}`;
+        const sel = $('totalRounds');
+        if (document.activeElement !== sel) {
+          // a host can't pick fewer rounds than have already started
+          sel.innerHTML = Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1).filter(k => k >= Math.max(MIN_ROUNDS, r))
+            .map(k => `<option value="${k}" ${k === n ? 'selected' : ''}>${k} ラウンド / ${k} rounds</option>`).join('');
+        }
+        $('roundsNote').textContent = r >= n ? (gameOver() ? '全ラウンド終了 / Game finished' : '最終ラウンド中 / Final round') : `あと${n - r}ラウンド / ${n - r} to go`;
+        const pill = conf ? ['done', '確定済み / Confirmed'] : st === 'open' ? (isOpen() ? ['open', '受付中 / Open'] : ['closed', '時間切れ / Time up']) : st === 'closed' ? ['closed', '締切 / Closed'] : ['idle', '待機中 / Idle'];
+        $('hostPill').innerHTML = `<span class="pill ${pill[0]}">${pill[1]}</span>`;
+
+        const armed = Date.now() < S.armedUntil;
+        const sb = $('btnStart');
+        sb.className = 'btn ' + (armed ? 'armed' : 'primary');
+        sb.innerHTML = r >= n ? (gameOver() ? `全${n}ラウンド終了<small>All rounds done</small>` : `最終ラウンドです<small>This is the final round</small>`)
+          : armed ? `もう一度押すと第${r + 1}ラウンドへ<small>Tap again to start Round ${r + 1}</small>` : `第${r + 1}ラウンド開始<small>Start Round ${r + 1}</small>`;
+        sb.disabled = r >= n;
+        $('btnClose').disabled = st !== 'open' || !!conf;
+        $('btnConfirm').disabled = !r || !!conf;
+        $('btnUnconfirm').disabled = !conf;
+
+        const list = r ? entries(r) : [];
+        $('hostQueue').innerHTML = list.length ? list.map((b, i) => {
+          const j = judge(b), t = team(b.team);
+          const place = j.kind === 'ng' ? '<span style="color:var(--ng)">NG</span>' : j.kind === 'late' ? '<span class="muted">遅れ</span>' : j.place >= 0 ? `${j.place + 1}位` : '<span class="muted">—</span>';
+          const sec = S.state.startAt ? ((b.at - S.state.startAt) / 1000).toFixed(1) + '秒' : '';
+          return `<div class="qrow ${j.kind === 'ng' ? 'is-ng' : ''}" style="--c:${esc(t.color)}">
+      <span class="num">${i + 1}</span><span class="team">${chip(b.team)}</span><span class="who">${esc(b.name)}</span><span class="sec">${sec}</span>
+      <span class="judge"><button type="button" class="jb ok ${b.verdict === 'ok' ? 'on' : ''}" data-judge="ok" data-id="${esc(b.id)}" aria-pressed="${b.verdict === 'ok'}">OK</button><button type="button" class="jb ng ${b.verdict === 'ng' ? 'on' : ''}" data-judge="ng" data-id="${esc(b.id)}" aria-pressed="${b.verdict === 'ng'}">NG</button></span>
+      <span class="place">${place}</span></div>`;
+        }).join('') + (conf ? '<p class="note">確定済みです。順位を変えるときは下の「結果の修正」を使ってください。 / Confirmed. Use “Fix results” below to change places.</p>' : '')
+          : `<div class="empty">${r ? 'まだ誰も押していません / No buzzes yet' : '「第1ラウンド開始」を押すと受付が始まります / Press “Start Round 1” to open buzzing'}</div>`;
+
+        $('hostStandings').innerHTML = standingsHtml();
+        renderFix();
+        renderTeamEdit();
+      }
+      $('totalRounds').addEventListener('change', e => {
+        const k = Number(e.target.value);
+        run(async () => { S.config = { ...S.config, totalRounds: k }; await S.db.doc('game/config').set(S.config); });
+        e.target.blur();
+      });
+      $('btnStart').addEventListener('click', () => {
+        if (S.state.round >= totalRounds()) return;
+        if (S.state.status === 'open' && Date.now() >= S.armedUntil) { S.armedUntil = Date.now() + 4000; render(); setTimeout(render, 4100); return; }
+        S.armedUntil = 0;
+        run(async () => {
+          const cur = S.state.round;
+          if (cur > 0 && !confirmed(cur)) await saveRounds({ ...(S.results.rounds || {}), [cur]: { places: computePlaces(cur), auto: true } });
+          const srv = await syncClock();
+          await writeState({ round: cur + 1, status: 'open', startAt: srv, closedAt: null });
+          if (cur > 0 && !S.results.rounds[cur].confirmedBy) hostMsg(`第${cur}ラウンドの結果を自動で確定しました / Round ${cur} was confirmed automatically`);
+        });
+      });
+      $('btnClose').addEventListener('click', () => run(async () => { const srv = await syncClock(); await writeState({ status: 'closed', closedAt: srv }); }));
+      $('btnConfirm').addEventListener('click', () => run(async () => {
+        const r = S.state.round;
+        if (S.state.status === 'open') { const srv = await syncClock(); await writeState({ status: 'closed', closedAt: Math.min(srv, deadline()) }); }
+        await saveRounds({ ...(S.results.rounds || {}), [r]: { places: computePlaces(r), confirmedBy: 'host' } });
+      }));
+      $('btnUnconfirm').addEventListener('click', () => run(async () => {
+        const rounds = { ...(S.results.rounds || {}) }; delete rounds[S.state.round]; await saveRounds(rounds);
+      }));
+      $('hostQueue').addEventListener('click', e => {
+        const b = e.target.closest('[data-judge]'); if (!b) return;
+        const cur = S.buzzes.find(x => x.id === b.dataset.id); if (!cur) return;
+        const v = cur.verdict === b.dataset.judge ? null : b.dataset.judge;
+        run(() => S.db.doc('buzzes/' + cur.id).update({ verdict: v }));
+      });
+
+      function standingsHtml() {
+        const t = totals();
+        const rows = S.teams.map(x => ({ ...x, pts: t[x.id] || 0 })).sort((a, b) => b.pts - a.pts);
+        const max = Math.max(1, ...rows.map(r => r.pts));
+        let rank = 0, prev = null;
+        return rows.map((x, i) => {
+          if (x.pts !== prev) { rank = i + 1; prev = x.pts; }
+          return `<div class="srow ${rank === 1 && x.pts > 0 ? 'top1' : ''}" style="--c:${esc(x.color)}"><span class="rk">${rank}</span>
+      <span>${chip(x.id)}<div class="bar"><i style="width:${(x.pts / max) * 100}%"></i></div></span><span class="pts">${x.pts}</span></div>`;
+        }).join('');
+      }
+
+      let fixSig = '';
+      function renderFix() {
+        const rounds = Object.keys(S.results.rounds || {}).map(Number).sort((a, b) => a - b);
+        const sig = JSON.stringify([S.results.rounds, S.teams]);
+        if (sig === fixSig) return; fixSig = sig;
+        const opts = sel => `<option value="">—</option>` + S.teams.map(t => `<option value="${t.id}" ${t.id === sel ? 'selected' : ''}>${esc(t.ja)} / ${esc(t.en)}</option>`).join('');
+        $('fixRounds').innerHTML = rounds.length ? rounds.map(r => {
+          const p = S.results.rounds[r].places || [];
+          return `<div class="fix-round" data-round="${r}"><b>第${r}R</b>${[0, 1, 2].map(i => `<label><span class="label">${i + 1}位 · ${POINTS[i]}点</span><select id="fix-${r}-${i}">${opts(p[i])}</select></label>`).join('')}</div>`;
+        }).join('') + `<div class="row-actions"><button type="button" class="btn primary" id="saveFix">保存<small>Save</small></button><span id="fixSaved" class="saved"></span></div>`
+          : '<p class="empty">確定したラウンドはまだありません / No confirmed rounds yet</p>';
+      }
+      $('fixRounds').addEventListener('click', e => {
+        if (e.target.closest('#saveFix') == null) return;
+        const rounds = { ...(S.results.rounds || {}) };
+        for (const r of Object.keys(rounds)) {
+          const picks = [0, 1, 2].map(i => ($(`fix-${r}-${i}`) || {}).value || '').filter(Boolean);
+          if (new Set(picks).size !== picks.length) { $('fixSaved').textContent = ''; hostMsg(`第${r}ラウンドで同じチームが2回選ばれています / Round ${r} has the same team twice`); return; }
+          rounds[r] = { ...rounds[r], places: picks, edited: true };
+        }
+        run(async () => { await saveRounds(rounds); fixSig = ''; renderFix(); const s = $('fixSaved'); if (s) s.textContent = '保存しました / Saved'; });
+      });
+
+      let teamEditSig = '';
+      function renderTeamEdit(force) {
+        const sig = JSON.stringify(S.teams);
+        if (sig === teamEditSig && !force) return; teamEditSig = sig;
+        $('teamEdit').innerHTML = S.teams.map(t => `<div class="team-edit"><input type="color" id="tc-${t.id}" value="${esc(t.color)}" aria-label="${esc(t.en)} color">
+    <input type="text" id="tj-${t.id}" value="${esc(t.ja)}" maxlength="12" aria-label="日本語名"><input type="text" id="te-${t.id}" value="${esc(t.en)}" maxlength="20" aria-label="English name"></div>`).join('');
+      }
+      $('saveTeams').addEventListener('click', () => {
+        const list = S.teams.map(t => ({ id: t.id, color: $('tc-' + t.id).value, ja: $('tj-' + t.id).value.trim() || t.ja, en: $('te-' + t.id).value.trim() || t.en }));
+        run(async () => { S.teams = list; await S.db.doc('game/teams').set({ list }); $('teamsSaved').textContent = '保存しました / Saved'; setTimeout(() => $('teamsSaved').textContent = '', 3000); });
+      });
+      $('defaultTeams').addEventListener('click', () => { const keep = S.teams; S.teams = DEFAULT_TEAMS; renderTeamEdit(true); S.teams = keep; teamEditSig = ''; $('teamsSaved').textContent = '「保存」で反映 / Press Save to apply'; });
+      $('savePass').addEventListener('click', () => {
+        const p = $('newPass').value.trim(); if (!p) return;
+        run(async () => { await S.db.doc('game/config').set({ ...S.config, passcode: p }); S.config.passcode = p; $('newPass').value = ''; $('passSaved').textContent = '変更しました / Changed'; });
+      });
+      $('resetAsk').addEventListener('click', () => { $('resetConfirm').hidden = false; });
+      $('resetCancel').addEventListener('click', () => { $('resetConfirm').hidden = true; });
+      $('resetDo').addEventListener('click', () => run(async () => {
+        $('resetDo').disabled = true;
+        try {
+          const all = await S.db.collection('buzzes').limit(1000).get();
+          for (let i = 0; i < all.docs.length; i += 8) await Promise.all(all.docs.slice(i, i + 8).map(d => S.db.doc('buzzes/' + d.id).delete()));
+          await saveRounds({});
+          await writeState({ round: 0, status: 'idle', startAt: null, closedAt: null });
+          $('resetConfirm').hidden = true; hostMsg('テスト結果を消しました / All test results cleared');
+        } finally { $('resetDo').disabled = false; }
+      }));
+
+      /* ----- score (projector) ----- */
+      function renderScore() {
+        const r = S.state.round, conf = r && confirmed(r);
+        const n = totalRounds();
+        $('scoreRound').innerHTML = !r ? `<small>${n} ROUNDS</small>まもなく開始`
+          : gameOver() ? `<small>FINAL RESULTS</small>最終結果` : `<small>ROUND ${r} / ${n}${r === n ? ' · FINAL' : ''}</small>第${r}ラウンド`;
+        $('scoreState').textContent = gameOver() ? 'おつかれさまでした！ / Thanks for playing!' : conf ? '結果確定 / Final' : S.state.status === 'open' ? (isOpen() ? '受付中 / Buzzing open' : '時間切れ / Time up') : S.state.status === 'closed' ? '締切 / Closed' : 'Get ready!';
+        const list = r ? entries(r) : [];
+        $('scoreQueue').innerHTML = list.length ? list.map((b, i) => {
+          const j = judge(b), t = team(b.team);
+          const [cls, st] = j.kind === 'ng' ? ['ng', 'NG'] : j.kind === 'late' ? ['ng', '時間切れ'] : j.place >= 0 && (j.kind === 'ok') ? ['place', `${j.place + 1}位`] : j.kind === 'ok' ? ['ok', 'OK'] : ['pending', 'チェック中'];
+          return `<div class="sqrow ${cls}" style="--c:${esc(t.color)}"><span class="n">${i + 1}</span><span class="who">${chip(b.team)}${esc(b.name)}</span><span class="st">${st}</span></div>`;
+        }).join('') : `<div class="empty" style="font-size:clamp(16px,2vw,26px)">${r ? 'お題に合う人を連れてきて、早押し！ / Find someone who fits and buzz!' : '借り人競争 / Borrow-a-Person Race'}</div>`;
+        $('scoreStandings').innerHTML = standingsHtml();
+      }
+
+      /* ---------- ticking ---------- */
+      let wasOpen = null;
+      function tick() {
+        const txt = timerText(), low = S.state.status === 'open' && deadline() - now() <= 15000;
+        document.querySelectorAll('[data-timer]').forEach(el => { el.textContent = txt; el.classList.toggle('low', low); });
+        const open = isOpen();
+        if (wasOpen !== null && open !== wasOpen) { wasOpen = open; render(); return; }
+        wasOpen = open;
+        if (S.view === 'team') updateBuzzButton();
+      }
+      setInterval(tick, 250);
+
+      let lock = null;
+      async function wakeLock() {
+        try { if (!lock && navigator.wakeLock && document.visibilityState === 'visible') { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } } catch { }
+      }
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeLock(); if (S.db && S.writable) syncClock().catch(() => { }); } });
+
+      /* ---------- boot ---------- */
+      async function boot() {
+        setView((location.hash || '').slice(1) || 'team', false);
+        const db = window.claude && window.claude.use ? await window.claude.use('db') : null;
+        if (!db) { S.noDb = true; S.writable = false; render(); return; }
+        S.db = db;
+        const err = () => { };
+        db.doc('game/state').onSnapshot(s => { S.state = s.exists ? { round: 0, status: 'idle', ...s.data() } : { round: 0, status: 'idle' }; render(); }, err);
+        db.doc('game/results').onSnapshot(s => { S.results = s.exists ? { rounds: {}, ...s.data() } : { rounds: {} }; render(); }, err);
+        db.doc('game/teams').onSnapshot(s => { const l = s.exists && s.data().list; S.teams = Array.isArray(l) && l.length === 10 ? l : DEFAULT_TEAMS; lastTeamSig = ''; render(); }, err);
+        db.doc('game/config').onSnapshot(s => { S.config = s.exists ? { ...s.data() } : {}; render(); }, err);
+        db.collection('buzzes').limit(1000).onSnapshot(q => { S.buzzes = q.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, err);
+        try {
+          const user = await window.claude.use('user');
+          const can = user ? await user.can('data.write') : null;
+          if (can === false) S.writable = false;
+        } catch { }
+        render();
+        if (S.writable) {
+          for (let i = 0; i < 3; i++) { try { await syncClock(); } catch { break; } await new Promise(r => setTimeout(r, 300)); }
+          setInterval(() => { syncClock().catch(() => { }); }, 180000);
+        }
+      }
+      boot();
+    })();
+  </script>
+</body>
+
+</html>
