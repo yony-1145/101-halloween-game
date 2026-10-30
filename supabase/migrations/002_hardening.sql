@@ -1,9 +1,8 @@
--- 借り人競争 早押し : セキュリティ強化（001_init.sql の後に1回実行）
--- SQL Editor に全部貼り付けて Run。何度実行しても大丈夫です。
--- 目的：URLを知っている人が書き込めるのは変わらないが、
---       「ゲームが想定していない形のデータ」はDBが拒否する（画面にスクリプトを仕込む攻撃などを防ぐ）
+-- 002_hardening: reject malformed documents, limit deletes and row count, validate leases.
+-- Run after 001_init. Idempotent: safe to run more than once.
 
--- ========== 1. 保存できるデータの形を決める ==========
+-- ---- Document validation ----
+-- Only the shapes the game writes are accepted (blocks markup injection and junk data).
 create or replace function public.docs_valid(p_path text, d jsonb) returns boolean
 language plpgsql immutable set search_path = public as $$
 declare
@@ -15,7 +14,7 @@ declare
 begin
   if d is null or jsonb_typeof(d) <> 'object' then return false; end if;
 
-  -- 受付（早押し）1件
+  -- A single buzz
   if c = 'buzzes' then
     return id ~ '^r[0-9]{1,2}-t[0-9]{1,2}-[0-9]{1,3}$'
       and jsonb_typeof(d->'round') = 'number' and (d->>'round') ~ '^[0-9]{1,2}$'
@@ -71,13 +70,13 @@ begin
     return true;
   end if;
 
-  return false; -- game/state, config, teams, results 以外は保存できない
+  return false; -- Unknown document
 end $$;
 
 alter table public.docs drop constraint if exists docs_shape;
 alter table public.docs add constraint docs_shape check (public.docs_valid(path, data)) not valid;
 
--- ========== 2. 受付の件数に上限（大量書き込みでDBを埋められないように） ==========
+-- ---- Row limit ----
 create or replace function public.docs_limit_rows() returns trigger
 language plpgsql set search_path = public as $$
 begin
@@ -91,11 +90,11 @@ drop trigger if exists docs_limit_rows on public.docs;
 create trigger docs_limit_rows before insert on public.docs
   for each row execute function public.docs_limit_rows();
 
--- ========== 3. 削除できるのは「受付」だけ（設定・得点・チームは消せない） ==========
+-- ---- Deletes: buzzes only ----
 drop policy if exists docs_delete on public.docs;
 create policy docs_delete on public.docs for delete to anon, authenticated using (coll = 'buzzes');
 
--- ========== 4. ロック：決まった形の名前だけ・期限切れは自動で掃除 ==========
+-- ---- Leases: strict keys, purge expired ----
 create or replace function public.acquire_lease(p_key text, p_holder text, p_ttl_ms int) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -113,7 +112,7 @@ begin
   end if;
   v_exp := v_now + make_interval(secs => p_ttl_ms / 1000.0);
 
-  -- 期限が1分以上前に切れたロックは消す（表が増え続けないように）
+  -- Purge leases that expired over a minute ago so the table stays small
   delete from public.leases where expires_at < v_now - interval '1 minute';
 
   insert into public.leases as l (key, holder, expires_at)

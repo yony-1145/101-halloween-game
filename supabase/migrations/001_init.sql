@@ -1,9 +1,8 @@
--- 借り人競争 早押し : Supabase setup (簡易版 / Option A)
--- Supabase ダッシュボード → SQL Editor に全部貼り付けて「Run」してください。
--- 何度実行しても壊れないように書いてあります。
+-- 001_init: document store, leases and access policies.
+-- Idempotent: safe to run more than once.
 
--- ========== 1. データ置き場（Claude の共有DBの代わり） ==========
--- path = 'game/state' や 'buzzes/r1-t1-1' のような「コレクション/ID」
+-- ---- Documents ----
+-- path is "<collection>/<id>", e.g. 'game/state' or 'buzzes/r1-t1-1'.
 create sequence if not exists public.docs_ver_seq;
 
 create table if not exists public.docs (
@@ -15,7 +14,7 @@ create table if not exists public.docs (
 );
 create index if not exists docs_coll_idx on public.docs (coll);
 
--- 更新のたびに ver を進める（端末側で「どちらが新しいか」を判断するため）
+-- Bump ver on every update so clients can discard stale rows.
 create or replace function public.docs_bump_ver() returns trigger
 language plpgsql set search_path = public as $$
 begin
@@ -28,14 +27,14 @@ drop trigger if exists docs_bump_ver on public.docs;
 create trigger docs_bump_ver before update on public.docs
   for each row execute function public.docs_bump_ver();
 
--- 部分更新（Firestore の update と同じ：既存データに上書きマージ）
+-- Shallow-merge a patch into an existing document.
 create or replace function public.doc_update(p_path text, p_patch jsonb) returns void
 language sql security invoker set search_path = public as $$
   update public.docs set data = data || p_patch where path = p_path;
 $$;
 
--- ========== 2. 排他ロック + サーバー時刻 ==========
--- 同じチームの2台目を弾く & 早押しの時刻をサーバー時計で決めるために使う
+-- ---- Leases ----
+-- Short-lived locks (one buzz per team at a time) that also return the server time.
 create table if not exists public.leases (
   key        text primary key,
   holder     text not null,
@@ -77,9 +76,10 @@ begin
     'expiresAt', to_char(v_cur at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
 end $$;
 
--- ========== 3. 権限（簡易版：URL を知っている人は読み書きできる） ==========
+-- ---- Access ----
+-- Public read/write on docs; leases are reachable only through acquire_lease().
 alter table public.docs   enable row level security;
-alter table public.leases enable row level security;   -- leases は関数経由でしか触れない
+alter table public.leases enable row level security;
 
 drop policy if exists docs_select on public.docs;
 drop policy if exists docs_insert on public.docs;
@@ -97,7 +97,7 @@ revoke all on function public.acquire_lease(text, text, int) from public;
 grant execute on function public.acquire_lease(text, text, int) to anon, authenticated;
 grant execute on function public.doc_update(text, jsonb) to anon, authenticated;
 
--- ========== 4. リアルタイム配信を有効化 ==========
+-- ---- Realtime ----
 do $$
 begin
   if not exists (

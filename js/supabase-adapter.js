@@ -1,15 +1,14 @@
-/* ---------- Supabase adapter ----------
-   The game was written for Claude's shared store (window.claude.use('db')).
-   This file recreates the small part of that API the game uses, on top of
-   Supabase: one table `docs` (path -> jsonb) plus an `acquire_lease` RPC
-   for locks and server time. See setup.sql. */
+/* Supabase data layer.
+   Exposes a small document-store API (doc / collection / onSnapshot / acquire) through
+   window.claude.use('db'), so the game code does not depend on Supabase directly.
+   Backed by the `docs` table and the `acquire_lease` RPC (see supabase/migrations). */
 (() => {
   const CFG = window.HAYAOSHI_CONFIG || {};
   const configured = CFG.SUPABASE_URL && CFG.SUPABASE_KEY &&
     !/YOUR_|xxxx/i.test(CFG.SUPABASE_URL + CFG.SUPABASE_KEY);
   if (!configured || !window.supabase || !window.supabase.createClient) {
     console.warn('[hayaoshi] Supabase is not configured; running offline.');
-    return; // game shows its "not connected" banner
+    return; // The game shows its "not connected" banner
   }
   const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -20,7 +19,7 @@
   const collOf = p => p.split('/')[0];
   const idOf = p => p.slice(p.indexOf('/') + 1);
 
-  // path -> { data, ver }   (whole table is small: game docs + buzzes)
+  // path -> { data, ver } (the whole table is small: game docs + buzzes)
   const cache = new Map();
   let loaded = false;
   const docSubs = new Map();  // path -> Set(fn)
@@ -60,7 +59,7 @@
     for (const [p, s] of docSubs) for (const fn of s) safe(() => fn(docSnap(p)));
     for (const [c, s] of collSubs) for (const sub of s) safe(() => sub.fn(collSnap(c, sub.limit)));
   }
-  // apply one row; ignore anything older than what we already have
+  // Apply one row, ignoring anything older than what we already have
   function applyRow(path, data, ver) {
     const cur = cache.get(path);
     if (cur && ver != null && cur.ver != null && ver < cur.ver) return false;
@@ -68,7 +67,8 @@
     return true;
   }
 
-  // ---- full reload (initial, after reconnect, on wake, and every 10s as a safety net)
+  /* ---- Full reload ----
+     Runs on start, after reconnect, when the page becomes visible, and every 10s as a safety net. */
   let refreshing = null;
   async function refresh() {
     if (refreshing) return refreshing;
@@ -84,7 +84,7 @@
     return refreshing;
   }
 
-  // ---- realtime
+  /* ---- Realtime ---- */
   let channel = null;
   function subscribe() {
     if (channel) sb.removeChannel(channel);
@@ -97,7 +97,7 @@
           if (applyRow(msg.new.path, msg.new.data, msg.new.ver)) notify([msg.new.path]);
         }
       })
-      // realtime only starts delivering changes after this message; reload then so nothing in the gap is missed
+      // Changes are delivered only after this message; reload so nothing in the gap is missed
   .on('system', {}, m => {
     if (m && m.extension === 'postgres_changes' && m.status === 'ok') refresh().catch(console.error);
   })
@@ -117,7 +117,7 @@
 
   const ok = ({ error }) => { if (error) throw error; };
 
-  // ---- the API the game uses
+  /* ---- Public API ---- */
   function docRef(path) {
     return {
       id: idOf(path),
@@ -168,7 +168,7 @@
         if (loaded) safe(() => fn(collSnap(coll, limit)));
         return () => collSubs.get(coll).delete(sub);
       },
-      async get() { // always ask the server, never trust the cache
+      async get() { // Always ask the server, never the cache
         const { data, error } = await sb.from('docs').select('path,data,ver').eq('coll', coll).limit(5000);
         if (error) throw error;
         for (const r of data) applyRow(r.path, r.data, r.ver);
@@ -186,13 +186,13 @@
     collection: c => query(c, [], null),
   };
 
-  // first load before the game boots, so its first render has data
+  // Load once before the game boots so its first render has data
   const ready = refresh().catch(e => { console.error('[hayaoshi] first load failed', e); });
 
   window.claude = {
     async use(name) {
       if (name === 'db') { await ready; return db; }
-      return null; // 'user' etc: no accounts on the public site
+      return null; // No user accounts on the public site
     },
   };
 })();

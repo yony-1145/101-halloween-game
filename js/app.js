@@ -1,3 +1,5 @@
+/* Borrow-a-Person Race: game logic for the team, host and score views.
+   Data access goes through window.claude.use('db'), provided by supabase-adapter.js. */
 (() => {
   const DUR = 120000, POINTS = [3, 2, 1], DEFAULT_PASS = '1031', DEFAULT_ROUNDS = 5, MIN_ROUNDS = 3, MAX_ROUNDS = 10;
   const DEFAULT_TEAMS = [
@@ -6,7 +8,7 @@
     ['t7', '#2f6fe0', '青', 'Blue'], ['t8', '#8e4ad8', '紫', 'Purple'], ['t9', '#ff6fb5', 'ピンク', 'Pink'], ['t10', '#f4f4f4', '白', 'White'],
   ].map(([id, color, ja, en]) => ({ id, color, ja, en }));
 
-  // in-memory copy so team choice still works on phones that block storage (in-app browsers, strict iOS settings)
+  // In-memory fallback so team choice still works on phones that block storage (in-app browsers, strict iOS settings)
   const mem = {};
   const LS = {
     get(k) { try { const v = localStorage.getItem(k); if (v != null) return v; } catch { } return k in mem ? mem[k] : null; },
@@ -14,7 +16,7 @@
   };
   const rid = () => Math.random().toString(36).slice(2, 10);
   const deviceId = LS.get('kb_dev') || (() => { const id = 'd' + rid(); LS.set('kb_dev', id); return id; })();
-  const holder = deviceId + '-' + rid(); // per tab, so two tabs never share a lease
+  const holder = deviceId + '-' + rid(); // Per tab, so two tabs never share a lease
 
   const S = {
     db: null, noDb: false, writable: true, view: 'team',
@@ -24,9 +26,9 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  /* ---------- server clock ----------
-     The store has no server timestamp, so we take it from a lease: a granted acquire() reports
-     expiresAt = server time + ttl. Buzz order uses that server time, never the phone's clock. */
+  /* ---- Server clock ----
+     A granted acquire() returns expiresAt = server time + ttl, which gives us the server time.
+     Buzz order always uses server time, never the phone's clock. */
   function parseTs(s) {
     const m = /^(.*T\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:?\d\d)$/i.exec(String(s));
     if (!m) return Date.parse(s);
@@ -47,7 +49,7 @@
   }
   const now = () => Date.now() + S.offset;
 
-  /* ---------- derived game state ---------- */
+  /* ---- Derived game state ---- */
   const team = id => S.teams.find(t => t.id === id) || { id, color: '#777777', ja: '?', en: '?' };
   function isLight(hex) {
     const h = String(hex).replace('#', ''); if (h.length < 6) return false;
@@ -79,7 +81,7 @@
     for (const [, res] of Object.entries(S.results.rounds || {})) (res.places || []).forEach((id, i) => { if (id in t) t[id] += POINTS[i] || 0; });
     return t;
   }
-  /** status of one buzz: pending | ok | ng | late, plus place index (0-based) or -1 */
+  /** Status of one buzz: pending | ok | ng | late, plus place index (0-based) or -1 */
   function judge(b) {
     if (b.verdict === 'ng') return { kind: 'ng', place: -1 };
     if (isLate(b)) return { kind: 'late', place: -1 };
@@ -95,7 +97,7 @@
     return '';
   }
 
-  /* ---------- views ---------- */
+  /* ---- Views ---- */
   const VIEWS = ['team', 'host', 'score'];
   function setView(v, push = true) {
     if (!VIEWS.includes(v)) v = 'team';
@@ -125,7 +127,7 @@
     } else el.hidden = true;
   }
 
-  /* ----- team ----- */
+  /* ---- Team ---- */
   let lastTeamSig = '';
   function myTeam() { const t = LS.get('kb_team'); return t && S.teams.some(x => x.id === t) ? t : null; }
   function renderTeam() {
@@ -202,7 +204,7 @@
     try {
       const r = S.state.round;
       const t0 = Date.now();
-      // one lease per team per round: two phones on the same team can never both get through
+      // One lease per team per round: two phones on the same team can never both get through
       const lease = await S.db.doc(`slots/r${r}-${tid}`).acquire({ holder, ttlMs: 3000 });
       const t1 = Date.now();
       if (!lease.acquired) throw new UErr('同じチームの別のスマホが受付中です / Another phone on your team is buzzing');
@@ -221,7 +223,7 @@
     } finally { S.busy = false; render(); }
   }
 
-  /* ----- host ----- */
+  /* ---- Host ---- */
   const passcode = () => String(S.config.passcode || DEFAULT_PASS);
   $('hostLock').addEventListener('submit', e => {
     e.preventDefault();
@@ -248,7 +250,7 @@
     $('hostRound').textContent = r ? `第${r}ラウンド / 全${n}` : `開始前 / 全${n}`;
     const sel = $('totalRounds');
     if (document.activeElement !== sel) {
-      // a host can't pick fewer rounds than have already started
+      // The host can't pick fewer rounds than have already started
       sel.innerHTML = Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1).filter(k => k >= Math.max(MIN_ROUNDS, r))
         .map(k => `<option value="${k}" ${k === n ? 'selected' : ''}>${k} ラウンド / ${k} rounds</option>`).join('');
     }
@@ -379,7 +381,7 @@
     } finally { $('resetDo').disabled = false; }
   }));
 
-  /* ----- score (projector) ----- */
+  /* ---- Score (projector) ---- */
   function renderScore() {
     const r = S.state.round, conf = r && confirmed(r);
     const n = totalRounds();
@@ -395,7 +397,7 @@
     $('scoreStandings').innerHTML = standingsHtml();
   }
 
-  /* ---------- ticking ---------- */
+  /* ---- Ticking ---- */
   let wasOpen = null;
   function tick() {
     const txt = timerText(), low = S.state.status === 'open' && deadline() - now() <= 15000;
@@ -413,7 +415,7 @@
   }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeLock(); if (S.db && S.writable) syncClock().catch(() => { }); } });
 
-  /* ---------- boot ---------- */
+  /* ---- Boot ---- */
   async function boot() {
     setView((location.hash || '').slice(1) || 'team', false);
     const db = window.claude && window.claude.use ? await window.claude.use('db') : null;
