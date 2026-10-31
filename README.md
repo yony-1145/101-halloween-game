@@ -25,6 +25,6 @@
 
 - フロントエンド：HTML / CSS / JavaScript（1ファイル）、GitHub Pagesで公開
 - バックエンド：Supabase（Postgres + Realtime）
-- `setup.sql`：データベースのテーブル・関数・権限の設定
+- `supabase/migrations/*.sql`：データベースのテーブル・関数・権限の設定（001 → 002 の順に実行）
 
 もともとはClaudeのアーティファクトとして作ったものを、ログインなしで使えるようにSupabaseへ移植しました。

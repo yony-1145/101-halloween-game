@@ -195,6 +195,8 @@
   $('buzzForm').addEventListener('submit', e => { e.preventDefault(); buzz(); });
 
   class UErr extends Error { }
+  // Supabase/Postgres errors meaning "the server refused this write" (RLS, check constraint, raise, auth)
+  const isPermErr = e => !!e && (['42501', '23514', 'P0001', 'PGRST301'].includes(e.code) || e.status === 401 || e.status === 403);
   async function buzz() {
     const tid = myTeam(), name = $('personName').value.trim();
     $('buzzErr').textContent = '';
@@ -218,7 +220,7 @@
       try { navigator.vibrate && navigator.vibrate(80); } catch { }
     } catch (e) {
       if (e instanceof UErr) $('buzzErr').textContent = e.message;
-      else if (e && e.code === 'invalid_argument') { S.writable = false; $('buzzErr').textContent = '送信できませんでした。編集権限を確認してください / Could not send. Check your edit access.'; }
+      else if (isPermErr(e)) { $('buzzErr').textContent = '送信できませんでした。編集権限を確認してください / Could not send. Check your edit access.'; }
       else $('buzzErr').textContent = '通信エラー。もう一度押してください / Network error, please try again';
     } finally { S.busy = false; render(); }
   }
@@ -235,11 +237,12 @@
   function hostMsg(t) { $('hostMsg').textContent = t || ''; }
   async function run(fn) {
     try { hostMsg(''); await fn(); }
-    catch (e) { hostMsg(e && e.code === 'invalid_argument' ? '保存できませんでした。このページの編集権限が必要です / Could not save: edit access needed' : '通信エラー。もう一度押してください / Network error, try again'); }
+    catch (e) { console.error(e); hostMsg(isPermErr(e) ?'保存できませんでした。このページの編集権限が必要です / Could not save: edit access needed' : '通信エラー。もう一度押してください / Network error, try again'); }
     render();
   }
-  async function writeState(patch) { const st = { round: 0, status: 'idle', startAt: null, closedAt: null, ...S.state, ...patch }; S.state = st; await S.db.doc('game/state').set(st); }
-  async function saveRounds(rounds) { S.results = { rounds }; await S.db.doc('game/results').set({ rounds }); }
+  // Write first, then update local state, so a failed save never looks saved
+  async function writeState(patch) { const st = { round: 0, status: 'idle', startAt: null, closedAt: null, ...S.state, ...patch }; await S.db.doc('game/state').set(st); S.state = st; }
+  async function saveRounds(rounds) { await S.db.doc('game/results').set({ rounds }); S.results = { rounds }; }
 
   function renderHost() {
     const unlocked = S.hostUnlocked;
@@ -286,7 +289,7 @@
   }
   $('totalRounds').addEventListener('change', e => {
     const k = Number(e.target.value);
-    run(async () => { S.config = { ...S.config, totalRounds: k }; await S.db.doc('game/config').set(S.config); });
+    run(async () => { const c = { ...S.config, totalRounds: k }; await S.db.doc('game/config').set(c); S.config = c; });
     e.target.blur();
   });
   $('btnStart').addEventListener('click', () => {
@@ -314,7 +317,15 @@
     const b = e.target.closest('[data-judge]'); if (!b) return;
     const cur = S.buzzes.find(x => x.id === b.dataset.id); if (!cur) return;
     const v = cur.verdict === b.dataset.judge ? null : b.dataset.judge;
-    run(() => S.db.doc('buzzes/' + cur.id).update({ verdict: v }));
+    run(async () => {
+      await S.db.doc('buzzes/' + cur.id).update({ verdict: v });
+      cur.verdict = v;
+      // A confirmed round follows later OK/NG changes, unless the host fixed its places by hand
+      const res = confirmed(cur.round);
+      if (!res) return;
+      if (res.edited) { hostMsg('手動修正済みのため順位は変わりません。「結果の修正」で直してください / Manually fixed; places unchanged. Use “Fix results”.'); return; }
+      await saveRounds({ ...(S.results.rounds || {}), [cur.round]: { ...res, places: computePlaces(cur.round) } });
+    });
   });
 
   function standingsHtml() {
@@ -329,27 +340,35 @@
     }).join('');
   }
 
-  let fixSig = '';
-  function renderFix() {
+  let fixSig = '', fixDirty = false;
+  function renderFix(force) {
     const rounds = Object.keys(S.results.rounds || {}).map(Number).sort((a, b) => a - b);
-    const sig = JSON.stringify([S.results.rounds, S.teams]);
-    if (sig === fixSig) return; fixSig = sig;
+    // Compare only what the form shows; server JSON comes back with a different key order
+    const sig = JSON.stringify([rounds.map(r => [r, S.results.rounds[r].places || []]), S.teams.map(t => [t.id, t.ja, t.en]), S.state.round]);
+    if (!force && (sig === fixSig || fixDirty || ($('fixRounds').contains(document.activeElement) && document.activeElement.matches('select')))) return;
+    fixSig = sig; fixDirty = false;
+    const r = S.state.round;
+    const hint = r && !confirmed(r) ? `<p class="note">第${r}ラウンドは「結果を確定」のあとで修正できます / Round ${r} can be fixed after you confirm it</p>` : '';
     const opts = sel => `<option value="">—</option>` + S.teams.map(t => `<option value="${t.id}" ${t.id === sel ? 'selected' : ''}>${esc(t.ja)} / ${esc(t.en)}</option>`).join('');
-    $('fixRounds').innerHTML = rounds.length ? rounds.map(r => {
+    $('fixRounds').innerHTML = hint + (rounds.length ? rounds.map(r => {
       const p = S.results.rounds[r].places || [];
       return `<div class="fix-round" data-round="${r}"><b>第${r}R</b>${[0, 1, 2].map(i => `<label><span class="label">${i + 1}位 · ${POINTS[i]}点</span><select id="fix-${r}-${i}">${opts(p[i])}</select></label>`).join('')}</div>`;
     }).join('') + `<div class="row-actions"><button type="button" class="btn primary" id="saveFix">保存<small>Save</small></button><span id="fixSaved" class="saved"></span></div>`
-      : '<p class="empty">確定したラウンドはまだありません / No confirmed rounds yet</p>';
+      : '<p class="empty">確定したラウンドはまだありません / No confirmed rounds yet</p>');
   }
+  $('fixBox').addEventListener('toggle', () => { if (!$('fixBox').open) { fixDirty = false; renderFix(true); } });
+  $('fixRounds').addEventListener('change', e => { if (e.target.matches('select')) { fixDirty = true; const s = $('fixSaved'); if (s) s.textContent = ''; } });
   $('fixRounds').addEventListener('click', e => {
     if (e.target.closest('#saveFix') == null) return;
     const rounds = { ...(S.results.rounds || {}) };
     for (const r of Object.keys(rounds)) {
-      const picks = [0, 1, 2].map(i => ($(`fix-${r}-${i}`) || {}).value || '').filter(Boolean);
+      if (!$(`fix-${r}-0`)) continue; // Round added after the form was drawn: leave it as is
+      const picks = [0, 1, 2].map(i => $(`fix-${r}-${i}`).value || '').filter(Boolean);
       if (new Set(picks).size !== picks.length) { $('fixSaved').textContent = ''; hostMsg(`第${r}ラウンドで同じチームが2回選ばれています / Round ${r} has the same team twice`); return; }
-      rounds[r] = { ...rounds[r], places: picks, edited: true };
+      const before = rounds[r].places || [];
+      if (picks.join() !== before.join()) rounds[r] = { ...rounds[r], places: picks, edited: true };
     }
-    run(async () => { await saveRounds(rounds); fixSig = ''; renderFix(); const s = $('fixSaved'); if (s) s.textContent = '保存しました / Saved'; });
+    run(async () => { await saveRounds(rounds); renderFix(true); $('fixSaved').textContent = '保存しました / Saved'; });
   });
 
   let teamEditSig = '';
@@ -361,7 +380,7 @@
   }
   $('saveTeams').addEventListener('click', () => {
     const list = S.teams.map(t => ({ id: t.id, color: $('tc-' + t.id).value, ja: $('tj-' + t.id).value.trim() || t.ja, en: $('te-' + t.id).value.trim() || t.en }));
-    run(async () => { S.teams = list; await S.db.doc('game/teams').set({ list }); $('teamsSaved').textContent = '保存しました / Saved'; setTimeout(() => $('teamsSaved').textContent = '', 3000); });
+    run(async () => { await S.db.doc('game/teams').set({ list }); S.teams = list; $('teamsSaved').textContent = '保存しました / Saved'; setTimeout(() => $('teamsSaved').textContent = '', 3000); });
   });
   $('defaultTeams').addEventListener('click', () => { const keep = S.teams; S.teams = DEFAULT_TEAMS; renderTeamEdit(true); S.teams = keep; teamEditSig = ''; $('teamsSaved').textContent = '「保存」で反映 / Press Save to apply'; });
   $('savePass').addEventListener('click', () => {
